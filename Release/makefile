@@ -60,8 +60,8 @@ all: main-build
 main-build: STM32G401RCT6_TEST.elf secondary-outputs
 
 # Tool invocations
-STM32G401RCT6_TEST.elf STM32G401RCT6_TEST.map: $(OBJS) $(USER_OBJS) D:\_Proj_MCU\STM32\STM32G401RCT6_TEST\STM32F401RCTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "STM32G401RCT6_TEST.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\_Proj_MCU\STM32\STM32G401RCT6_TEST\STM32F401RCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32G401RCT6_TEST.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+STM32G401RCT6_TEST.elf STM32G401RCT6_TEST.map: $(OBJS) $(USER_OBJS) C:\Projects_MCU\STM32\STM32G401RCT6_TEST\STM32F401RCTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "STM32G401RCT6_TEST.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Projects_MCU\STM32\STM32G401RCT6_TEST\STM32F401RCTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32G401RCT6_TEST.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
