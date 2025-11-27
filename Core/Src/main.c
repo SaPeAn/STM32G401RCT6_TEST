@@ -15,6 +15,7 @@
   *
   ******************************************************************************
   */
+#define  AVER_PERIOD    100
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -23,10 +24,46 @@
 /* USER CODE BEGIN Includes */
 #include "common.h"
 #include "drv_LCD_ST7565_SPI.h"
+#include "ringbuf.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef union{
+	uint16_t array[5];
+	struct{
+		uint16_t batlvl;
+		uint16_t jox;
+		uint16_t joy;
+		uint16_t tmpr;
+		uint16_t vref;
+	};
+}ADCdat_t;
+
+
+typedef struct
+{
+  int batlvl;
+  int jox;
+  int joy;
+  int tmpr;
+  int vref;
+}ADCaverdat_t;
+
+int32_t aver_counter = AVER_PERIOD;
+uint32_t adc_complete = 1;
+uint32_t adc_avercomplete = 0;
+
+typedef struct
+{
+  uint8_t joyx[128];
+  uint8_t joyy[128];
+  uint8_t Vbat[128];
+  uint8_t Vpowsup[128];
+  uint8_t Temper[128];
+  uint8_t UART_string[1024];
+  uint8_t Seconds[128];
+}DispDat_t;
 
 /* USER CODE END PTD */
 
@@ -55,6 +92,14 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+RINGBUF_t ringbuf;
+uint8_t rx_buf[1024] = {0};
+uint8_t temp_byte;
+DispDat_t temp_str = {0};
+
+ADCdat_t ADC_data;
+uint8_t temp_byte;
+ADCaverdat_t ADC_averdata;
 
 uint16_t tone = 100;
 /* USER CODE END PV */
@@ -127,21 +172,113 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+
   HAL_GPIO_WritePin(PWR_OFF_GPIO_Port, PWR_OFF_Pin, SET);
+
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 50000);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-  LCD_init();
 
-  LCD_printstr8x5("Hello!!!", 2, 10);
+  LCD_init();
+  RingBuf_Init(rx_buf, 1024, 1, &ringbuf);
+
+
+  LCD_printstr8x5((uint8_t*)"Hello!!!", 2, 10);
   LCDbuf_upload();
   LCDbuf_erase();
-
+  HAL_Delay(3000);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  HAL_UART_Receive_IT(&huart1, &temp_byte, 1);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_data.array, 5);
+
+  uint16_t buf_len = 0;
+	uint16_t buf_len_prev = 0;
+	uint32_t period[3] = {20, 20, 5};
+	uint32_t temp_tick[3] = {0};
+	int Temperature = 0;
+	int joyVoltX = 0;
+	int joyVoltY = 0;
+	int Vbattery = 0;
+	int Vpower = 0;
+	LCDbuf_erase();
   while (1)
   {
+
+	  RingBuf_Available(&buf_len, &ringbuf);
+	  if(buf_len)
+	  {
+		if(buf_len_prev != buf_len)
+		{
+		  buf_len_prev = buf_len;
+		  temp_tick[2] = HAL_GetTick();
+		}
+		if((HAL_GetTick() - temp_tick[2]) > period[2])
+		{
+		  RingBuf_DataRead(temp_str.UART_string, buf_len, &ringbuf);
+		  temp_str.UART_string[buf_len] = '\0';
+		  HAL_UART_Transmit_IT(&huart1, (uint8_t*)"OK!", 4);
+		}
+	  }
+
+	  if(adc_avercomplete)
+	  {
+		ADC_averdata.batlvl = ADC_averdata.batlvl / AVER_PERIOD;
+		ADC_averdata.jox /= AVER_PERIOD;
+		ADC_averdata.joy /= AVER_PERIOD;
+		ADC_averdata.tmpr /= AVER_PERIOD;
+		ADC_averdata.vref /= AVER_PERIOD;
+
+		joyVoltX = (ADC_averdata.jox * 1157) / ADC_averdata.vref;
+		sprintf((char*)temp_str.joyx, "Jx: %d.%02dV", joyVoltX/1000, (joyVoltX%1000)/10);
+		joyVoltY = (ADC_averdata.joy * 1157) / ADC_averdata.vref;
+		sprintf((char*)temp_str.joyy, "Jy: %d.%02dV", joyVoltY/1000, (joyVoltY%1000)/10);
+		Vbattery = (ADC_averdata.batlvl * 1580) / ADC_averdata.vref;
+		sprintf((char*)temp_str.Vbat, "Vb: %d.%02dV", Vbattery/1000, (Vbattery%1000)/10);
+		Vpower = (4095 * 1157) / ADC_averdata.vref;
+		sprintf((char*)temp_str.Vpowsup, "Vp: %d.%02dV", Vpower/1000, (Vpower%1000)/10);
+		Temperature = 358 - ((int)ADC_averdata.tmpr * 279) / (int)ADC_averdata.vref;
+		sprintf((char*)temp_str.Temper, "T:  %d%cC",Temperature, 176);
+
+		ADC_averdata.batlvl = 0;
+		ADC_averdata.jox = 0;
+		ADC_averdata.joy = 0;
+		ADC_averdata.tmpr = 0;
+		ADC_averdata.vref = 0;
+		adc_avercomplete = 0;
+		aver_counter = AVER_PERIOD;
+	  }
+
+	  sprintf((char*)temp_str.Seconds, "%02lu:%02lu:%02lu", (HAL_GetTick()/1000)/3600, ((HAL_GetTick()/1000)%3600)/60, (HAL_GetTick()/1000)%60);
+
+	  if((HAL_GetTick() - temp_tick[0]) > period[0])
+	  {
+		temp_tick[0] = HAL_GetTick();
+		LCDbuf_erase();
+		LCD_printstr8x5(temp_str.joyx, 0, 0);
+		LCD_printstr8x5(temp_str.joyy, 1, 0);
+		LCD_printstr8x5(temp_str.Vbat, 0, 65);
+		LCD_printstr8x5(temp_str.Vpowsup, 1, 65);
+		LCD_printstr8x5(temp_str.Temper, 2, 0);
+		LCD_printstr8x5(temp_str.Seconds, 2, 65);
+		LCD_printstr8x5(temp_str.UART_string, 3, 0);
+	  }
+
+	  /*-----------------�������� ������ �� lcd-������ �� �������------------*/
+	  if((HAL_GetTick() - temp_tick[1]) > period[1])
+	  {
+		temp_tick[1] = HAL_GetTick();
+		LCDbuf_upload();
+	  }
+	  /*---------------------------------------------------------------------*/
+
+	  if(adc_complete)
+	  {
+		HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_data.array, 5);
+		adc_complete = 0;
+	  }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -452,7 +589,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 9600;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -513,7 +650,7 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA2_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
 }
@@ -587,6 +724,41 @@ void HAL_IncTick(void)
 {
   uwTick += uwTickFreq;
   timestamp++;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if(huart == &huart1)
+  {
+    RingBuf_BytePut(temp_byte, &ringbuf);
+    HAL_UART_Receive_IT (&huart1, &temp_byte, 1);
+  }
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if(huart == &huart1)
+  {
+  }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+  if(hadc->Instance == ADC1)
+  {
+    if(aver_counter)
+    {
+      ADC_averdata.batlvl += (uint32_t) ADC_data.batlvl;
+      ADC_averdata.jox += (uint32_t) ADC_data.jox;
+      ADC_averdata.joy += (uint32_t) ADC_data.joy;
+      ADC_averdata.tmpr += (uint32_t) ADC_data.tmpr;
+      ADC_averdata.vref += (uint32_t) ADC_data.vref;
+      aver_counter--;
+    }
+    else adc_avercomplete = 1;
+
+    adc_complete = 1;
+  }
 }
 /* USER CODE END 4 */
 

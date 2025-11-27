@@ -1,6 +1,7 @@
 "./Core/Src/common.o"
 "./Core/Src/drv_LCD_ST7565_SPI.o"
 "./Core/Src/main.o"
+"./Core/Src/ringbuf.o"
 "./Core/Src/scheduler.o"
 "./Core/Src/stm32f4xx_hal_msp.o"
 "./Core/Src/stm32f4xx_it.o"
