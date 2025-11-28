@@ -61,6 +61,7 @@ typedef struct
   uint8_t Seconds[128];
 }DispDat_t;
 
+uint32_t AAA;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/

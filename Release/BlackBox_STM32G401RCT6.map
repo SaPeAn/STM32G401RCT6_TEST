@@ -203,6 +203,7 @@ Discarded input sections
  .bss           0x00000000        0x0 ./Core/Src/main.o
  .text._write   0x00000000       0x30 ./Core/Src/main.o
  .data.tone     0x00000000        0x2 ./Core/Src/main.o
+ .bss.AAA       0x00000000        0x4 ./Core/Src/main.o
  .text          0x00000000        0x0 ./Core/Src/ringbuf.o
  .data          0x00000000        0x0 ./Core/Src/ringbuf.o
  .bss           0x00000000        0x0 ./Core/Src/ringbuf.o
