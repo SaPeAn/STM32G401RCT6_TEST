@@ -32,9 +32,9 @@
 typedef union{
 	uint16_t array[5];
 	struct{
-		uint16_t batlvl;
 		uint16_t jox;
 		uint16_t joy;
+		uint16_t batlvl;
 		uint16_t tmpr;
 		uint16_t vref;
 	};
@@ -49,10 +49,6 @@ typedef struct
   int tmpr;
   int vref;
 }ADCaverdat_t;
-
-int32_t aver_counter = AVER_PERIOD;
-uint32_t adc_complete = 1;
-uint32_t adc_avercomplete = 0;
 
 typedef struct
 {
@@ -100,6 +96,10 @@ DispDat_t temp_str = {0};
 ADCdat_t ADC_data;
 uint8_t temp_byte;
 ADCaverdat_t ADC_averdata;
+
+int32_t aver_counter = AVER_PERIOD;
+uint32_t adc_complete = 1;
+uint32_t adc_avercomplete = 0;
 
 uint16_t tone = 100;
 /* USER CODE END PV */
@@ -173,19 +173,11 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_GPIO_WritePin(PWR_OFF_GPIO_Port, PWR_OFF_Pin, SET);
-
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 50000);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-
+  commoninit();
+  initbuttons();
   LCD_init();
   RingBuf_Init(rx_buf, 1024, 1, &ringbuf);
 
-
-  LCD_printstr8x5((uint8_t*)"Hello!!!", 2, 10);
-  LCDbuf_upload();
-  LCDbuf_erase();
-  HAL_Delay(3000);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -197,15 +189,16 @@ int main(void)
 	uint16_t buf_len_prev = 0;
 	uint32_t period[3] = {20, 20, 5};
 	uint32_t temp_tick[3] = {0};
+	int Vtemper = 0;
 	int Temperature = 0;
 	int joyVoltX = 0;
 	int joyVoltY = 0;
 	int Vbattery = 0;
 	int Vpower = 0;
 	LCDbuf_erase();
+
   while (1)
   {
-
 	  RingBuf_Available(&buf_len, &ringbuf);
 	  if(buf_len)
 	  {
@@ -218,7 +211,7 @@ int main(void)
 		{
 		  RingBuf_DataRead(temp_str.UART_string, buf_len, &ringbuf);
 		  temp_str.UART_string[buf_len] = '\0';
-		  HAL_UART_Transmit_IT(&huart1, (uint8_t*)"OK!", 4);
+		  HAL_UART_Transmit_IT(&huart1, (uint8_t*)"OK!\n", 5);
 		}
 	  }
 
@@ -230,15 +223,17 @@ int main(void)
 		ADC_averdata.tmpr /= AVER_PERIOD;
 		ADC_averdata.vref /= AVER_PERIOD;
 
-		joyVoltX = (ADC_averdata.jox * 1157) / ADC_averdata.vref;
+        //������� ���������� �� ������ ���
+		joyVoltX = (ADC_averdata.jox * 1210) / ADC_averdata.vref;
 		sprintf((char*)temp_str.joyx, "Jx: %d.%02dV", joyVoltX/1000, (joyVoltX%1000)/10);
-		joyVoltY = (ADC_averdata.joy * 1157) / ADC_averdata.vref;
+		joyVoltY = (ADC_averdata.joy * 1210) / ADC_averdata.vref;
 		sprintf((char*)temp_str.joyy, "Jy: %d.%02dV", joyVoltY/1000, (joyVoltY%1000)/10);
-		Vbattery = (ADC_averdata.batlvl * 1580) / ADC_averdata.vref;
+		Vbattery = (ADC_averdata.batlvl * 1853) / ADC_averdata.vref;
 		sprintf((char*)temp_str.Vbat, "Vb: %d.%02dV", Vbattery/1000, (Vbattery%1000)/10);
-		Vpower = (4095 * 1157) / ADC_averdata.vref;
+		Vpower = (4095 * 1210) / ADC_averdata.vref;
 		sprintf((char*)temp_str.Vpowsup, "Vp: %d.%02dV", Vpower/1000, (Vpower%1000)/10);
-		Temperature = 358 - ((int)ADC_averdata.tmpr * 279) / (int)ADC_averdata.vref;
+		Vtemper = (ADC_averdata.tmpr * 12100) / ADC_averdata.vref; // x10 mV
+		Temperature = 25 + (Vtemper - 7600) / 25;
 		sprintf((char*)temp_str.Temper, "T:  %d%cC",Temperature, 176);
 
 		ADC_averdata.batlvl = 0;
@@ -362,9 +357,9 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.NbrOfConversion = 5;
   hadc1.Init.DMAContinuousRequests = DISABLE;
-  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
     Error_Handler();
@@ -372,9 +367,45 @@ static void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_84CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = 2;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = 3;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Rank = 4;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_VREFINT;
+  sConfig.Rank = 5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -589,7 +620,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 9600;
+  huart1.Init.BaudRate = 230400;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;

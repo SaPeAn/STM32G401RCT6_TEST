@@ -12,6 +12,7 @@ tButton B1;
 tButton B2;
 tButton B3;
 tButton B4;
+tButton BJ;
 tJoystick joystick = {0};
 
 uint32 timestamp = 0;    // System timer (ms), starts counting from power on or last restart
@@ -101,7 +102,8 @@ void u16_to_str(uint8* str, uint16 num, uint8 N)
 void commoninit(void)
 {
   HAL_GPIO_WritePin(PWR_OFF_GPIO_Port, PWR_OFF_Pin, SET);
-  HAL_GPIO_WritePin(PWR_OFF_GPIO_Port, PWR_OFF_Pin, RESET);
+  HAL_GPIO_WritePin(SOUND__GPIO_Port, SOUND__Pin, RESET);
+  HAL_GPIO_WritePin(SOUND_B5_GPIO_Port, SOUND_B5_Pin, RESET);
   BrightPWMgen(220);
   brightPWM = EEPROM_readbyte(PWM_MEMADR);
   if(brightPWM == 0) brightPWM = 220;
@@ -113,6 +115,7 @@ void initbuttons(void)
   B2 = CreateBtn(BTN_1_GPIO_Port, BTN_1_Pin, &timestamp);
   B3 = CreateBtn(BTN_2_GPIO_Port, BTN_2_Pin, &timestamp);
   B4 = CreateBtn(BTN_3_GPIO_Port, BTN_3_Pin, &timestamp);
+  BJ = CreateBtn(BTN_J_GPIO_Port, BTN_J_Pin, &timestamp);
 }
 /*----------------------------------------------------------------------------*/
 
@@ -189,6 +192,7 @@ void incbright(void)
 }
 
 extern TIM_HandleTypeDef htim3;
+
 void BrightPWMgen(uint8 duty_cycle)
 {
 	uint16 dutyCycle = ((uint16)duty_cycle) * 255;
